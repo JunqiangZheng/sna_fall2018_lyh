@@ -1,0 +1,291 @@
+---
+title: "sna_fall2018_lyh"
+author: "liyuhang"
+date: "2018年11月6日"
+output: html_document
+---
+## 实证数据分析案例
+
+###一 研究背景
+    
+    小明等人在某网络平台学习过程中与老师、同学们进行学习交流，产生了一些交互数据，现对数据进行分析。
+
+###二 研究问题
+    
+    学生之间、师生之间如何交互？
+
+  （1）产生了什么样的交互网络？交互网络有何特征
+
+  （2）网络中每个参与者的参与程度如何？
+
+###三 研究方法
+
+    收集平台数据，利用R语言对其进行分析，主要角度：SNA（social network analysis）。
+
+###四 研究过程
+
+    可能运用到的package有：dplyr，reshape2，sna，igraph，visNetwork等。
+    
+    本次数据已经使用dplyr，reshape2等package进行select，dcast等操作处理。分析以sna为例，基本步骤如下：
+        1.读入原始数据文件、声明库
+        2.从node-level进行分析
+        3.从network-level进行分析
+        4.从graph-level进行分析
+        5.尝试对程序进行优化（利用自定义函数）
+    
+    后文结构安排：五研究结果结合代码实现进行讲述，六总结对整体研究思路进行概括总结
+
+###五 研究结果
+
+####1.data & library
+
+```{r}
+library(sna)
+    ###读入原始数据文件
+all_matrix<- read.csv("D:/zju/课程/欧阳/slides/all_matrix.csv",row.names=1)
+all_edge<- read.csv("D:/zju/课程/欧阳/slides/all_edge.csv")
+    ###将矩阵转化成网络，下面对此进行分析###
+overallnet=network(all_matrix)
+```
+
+####2.node-level
+
+
+```{r}
+    ###计算in/outdegree，分别是我贡献和我收到的交互信息###
+id<-degree(overallnet,gmode="digraph",cmode="indegree")
+od<-degree(overallnet,gmode="digraph",cmode="outdegree")
+    ###结果###
+id
+od
+
+    ###计算betweenness，对不同小组的连接能力，rescale默认为假，若为真则分数总和为1###
+bet1=betweenness(overallnet,rescale=T)
+bet2=betweenness(overallnet)
+    ###结果###
+bet1
+bet2
+
+    ###计算closeness，与其他人的紧密关系，散播和得到消息的能力高，rescale同上###
+clo1=closeness(overallnet,rescale=T)
+clo2=closeness(overallnet)
+    ###结果###
+clo1
+clo2
+
+
+    ###计算eigenvector，中心顶点间的比重关系，越高则连接其他顶点的可能性越大，rescale同上###
+eig1=evcent(overallnet,rescale=T)
+eig2=evcent(overallnet)
+    ###结果###
+eig1
+eig2
+
+    ###使用SNA包的plot.sociomatrix颜色强度绘制函数对network进行处理，只要有交互就会有显示###
+    ###参数：数据，不标记对角线，标题，横纵标签显示时的大小，图标显示时Y/X的比例
+plot.sociomatrix(overallnet, diaglab = FALSE, main = "The overall interaction", cex.lab = 0.4, asp = 0.5)
+
+    ###使用SNA包的gplot网络可视化函数在network层级对node等进行处理###
+    ###参数：数据，顶点大小，无向图
+    ###      顶点标签不加框线，标签大小，位置不偏移，颜色
+    ###      顶点颜色基于in/degree设置，模式RGB，边线颜色
+    ###      标签内容是网络顶点名，边线宽度基于矩阵设置
+    ###      模式基于fruchtermanreingold的gplot.layout函数设置
+gplot(overallnet, vertex.cex=(id+od)^0.5/2, gmode="graph",
+      boxed.labels=FALSE,label.cex=0.7, label.pos=5, label.col="white",
+      vertex.col=rgb((id+od)/max(id+od),0,(id+od)/max(id+od)),edge.col="grey17",
+      label=network.vertex.names(overallnet),edge.lwd=all_matrix/2,mode = "fruchtermanreingold")
+
+```
+
+####3.network-level
+
+```{r}
+
+    ###使用SNA包的gplot网络可视化函数在network层级进行处理###
+    ###参数：矩阵数据，有向图，显示vertex顶点标签，标签字符大小character expansion，顶点大小，顶点颜色，边线###
+gplot(all_matrix,gmode="digraph", displaylabels=TRUE,label.cex=0.7,label.pos=5,
+      vertex.cex=2.0,vertex.col="cornflowerblue",edge.len=FALSE)
+
+```
+
+####4.graph-level
+
+```{r}
+ ###SNA包centralization函数计算集中化程度，结果返回一个中心值
+centralization(overallnet,degree)
+centralization(overallnet,degree,cmode="outdegree")
+centralization(overallnet,degree,cmode="indegree")
+centralization(overallnet,betweenness)
+centralization(overallnet,closeness)
+centralization(overallnet,evcent)
+
+    ###计算网络大小、密度、交互度，平均交互度，入向和出向的平均
+network.size(overallnet)            #size
+gden(overallnet,mode="graph")       #density
+degree(overallnet)                  #all degreee
+mean(degree(overallnet))            #average degree
+sum(id)/20                          #average in degree
+sum(od)/20                          #average out degree
+
+    ###计算网络中信息传递的程度，先计算数量，后评估关系
+    ###dyad.census函数结果分三类：相互（A给B并B给A），不对称（A给B或B给A），空（无关）
+    ###此处是66，62，62
+dyad.census(overallnet)
+
+    ###network.dyadcount函数结果表示网络中二元组的数量，可以指定对象X，na.omit真则忽略边缘方向
+    ###此处针对overallnet整个网络=66+62+62=190，双向380，未忽略
+network.dyadcount(overallnet, na.omit = F)
+
+    ###network.edgecount函数计算整个网络的连接线，此处194条边线，未忽略
+network.edgecount(overallnet, na.omit = F)
+    
+    ###计算整个网络的二元互易性，可以理解为邻居关联程度，单独个体有邻居为1，无邻居为0
+    ###此处计算整体结果，结果必属于(0,1]，只有空图或全互联为1
+    ###几种具体测量方式：默认dyadic
+    #---edgewise= num((a,b)==(b,a))/all
+    #---dyadic= num(边界)/非空
+    #---dyadic.nonnull= 相互/非空，此处=66/66+62=0.515625
+grecip(overallnet, measure = "edgewise")
+grecip(overallnet, measure = "dyadic")
+grecip(overallnet, measure = "dyadic.nonnull")
+
+    ###transitivity
+    ###计算整个网络的三元信息传递性，分为强传递和弱传递（默认弱），丢弃缺省三元组（a/b/c=null）
+    #---弱a-> b-> c => a-> c。单向推出
+    #---强a-> b-> c <=> a-> c。双向等价
+gtrans(overallnet)
+
+    ###hierarchy
+    ###计算整个网络的等级分数,整体不对称程度越大，等级层次结构就越多
+    #---reciprocity方式=1-grecip分数（默认dyadic）
+    #---krackhardt方式，如非对称非空对象之间无往返路径则值=1，else=0，累计分数判断等级
+hierarchy(overallnet, measure = "reciprocity")
+hierarchy(overallnet, measure = "krackhardt")
+
+
+    ###弱连接的方式计算整体的组件成份数（图的数目），这里只有一张图，当然是1
+components(overallnet,connected="weak")
+    ###计算Krackhardt推荐的connectedness图之间的连接程度，g值默认为全部数据，一张图=1
+connectedness(overallnet, g=NULL)
+
+    ###geodist计算所有节点之间的路径和数量
+    #---如果节点间没有路径用inf.replace的值代替
+    #---count.paths为真则结果输出路径数量矩阵
+    #---predecessors为真则结果包含前导节点
+    #---ignore.eval为真则忽略边缘路径信息，一般为TRUE
+geodist(overallnet, inf.replace=Inf, count.paths=TRUE, predecessors=FALSE,ignore.eval=TRUE)
+geo=geodist(overallnet)
+    ###此处会返回counts和gdist两个矩阵，针对geo中gdist矩阵求最大路径，看整体维度
+max(geo$gdist)  #diameter
+
+```
+
+####5.尝试对程序进行优化（利用自定义函数）
+
+```{r}   
+    ###自定义函数：将网络节点的in/outdegree等五个参数建立二维列表并排序
+    ###按照网络节点对象和参数值进行排列
+    ###cbind取值到矩阵、列表等，%v%从矩阵、列表取特定值/列
+node.centrality<-function(list.net){
+  lapply(list.net,
+         function(z){
+           x<-z
+           ###计算五个参数，并命名行列两个维度的名称
+           central.nodes<-cbind(degree(x,cmode="indegree"), degree(x,cmode="outdegree"),evcent(x,rescale=T),betweenness(x,rescale=T),
+                                closeness(x,cmode="directed",rescale=T))
+           colnames(central.nodes)<-c("idegree","odegree","eigen","betweenness","closeness")
+           rownames(central.nodes)<-z%v%"vertex.names"
+           ###对二维列表的每一列进行排序,感觉结果不太对，注释掉了
+           #o1<-order(central.nodes[,1],decreasing =TRUE)
+           #o2<-order(central.nodes[,2],decreasing =TRUE)
+           #o3<-order(central.nodes[,3],decreasing =TRUE)
+           #o4<-order(central.nodes[,4],decreasing =TRUE)
+           #o5<-order(central.nodes[,5],decreasing =TRUE)
+           #list(ranking=central.nodes,order=cbind(o1,o2,o3,o4,o5))
+         })
+}
+    ###使用自定义函数验证
+node.centrality(list(overallnet))
+
+
+
+    ###自定义函数计算整个网络中两个节点间路径的平均长度=总路径数/总二元组关系数
+    ###注意无向图二元组数量要2倍
+    #---choose(network.size(net),2)=190，整个网络中选择2个节点间的有向图directed关系数量
+averagePathLength<-function(net){
+  if(!is.network(net)){stop("Not a Network")}
+  gd<-geodist(net)
+  if(net%n%"directed"){
+    return((1/choose(network.size(net),2))*sum(gd$gdist))
+  }
+  (1/(2*choose(network.size(net),2)))*sum(gd$gdist)
+}
+    ###计算例子中平均路径长度
+averagePathLength(overallnet)
+
+
+
+    ###自定义函数计算整体维度的最大路径数
+diameter<-function(net){
+  gd<-geodist(net)
+  max(gd$gdist)
+}
+    ###计算例子中最大路径
+diameter(overallnet)
+
+```
+
+###六 总结
+
+####1.node-level
+
+·四个维度：   
+1.indegree，数值越大，我收到的信息越多   
+2.outdegree，数值越大，我发出的信息越多  
+3.betweenness，数值越大，我连接不同小组的能力越强  
+4.closeness，数值越大，我散播和得到消息的能力越高   
+·一张表格：plot.sociomatrix函数，只要有交互，就会显示为黑色，可设置其他显示参数  
+·一张图示：gplot函数，以点和线的方式展示交互，点大小代表人交互表现，线粗细代表交互次数，无向图
+
+####2.network-level
+
+·一张图示：gplot函数，以点和线的方式展示交互，点和线属性一致，用有向图表示交互双方，密集程度看图中连线数量
+
+####3.graph-level
+
+·基本分析：  
+1.network.size，网络节点数量，即参与人数  
+2.gden，网络密集程度，是否有分散的情况出现  
+3.degree，网络交互度（平均/入向/出向交互度等）  
+4.centralization，网络集中度，反映大家的集中参与情况  
+
+·二元交互：  
+1.dyad.census，先算A<->B/A->B/A<-B三种交互情况数量
+2.network.dyadcount，再算任意两个人交互情况的数量，注意考虑有向/无向
+3.network.edgecount，接着算出任意二者交互的体现——边的数量
+4.grecip，最后算出对于二元交互邻居是空的特殊情况比例，即自己是边界端点，注意三种计算规则
+
+·三元交互：
+    gtrans，分为弱规则a->b->c => a->c和强规则a->b->c <=> a->c，单项推出和双向等价道理
+
+·更高等级：
+    hierarchy，如果交互不对称程度越高大，整个等级层次就越多，显得越不规则，注意两种计算规则
+
+·更多图示：
+    components，整体组件数目分析，等价于计算图示的数目
+    connectedness，计算图示之间的连接程度，等价于图示之间的相关关系
+
+·路径分析：（上述标准越丰富，路径计算越复杂）
+    geodist，计算两个节点之间的路径数量和具体路径步数值，通常会看最大步数值，确定相互可达的直径范围
+
+
+####4.感悟：
+
+package好多好多，function好牛好牛，这么短时间肯定是学不完liao~
+
+
+####5.Reference:
+R-color:https://blog.csdn.net/Bone_ACE/article/details/47362619   
+Actually,No.1 is Google.  :):):)
+
