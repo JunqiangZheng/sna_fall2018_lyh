@@ -7,7 +7,8 @@ github内包含：
 2.all_edge.csv  
 3.all_matrix.csv  
 4.sna_fall2018_lyh.Rmd  
-5.sna_script_lyh.R
+5.sna_script_lyh.R  
+（基本都是对老师给的例子进行理解和模仿）
 
 R markdown链接：  
 http://rpubs.com/liyuhangxiaohuo/sna_fall2018_lyh  
